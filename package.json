@@ -1,0 +1,17 @@
+{
+  "name": "tiktok-scraper-api",
+  "version": "1.0.0",
+  "description": "Production-ready API to scrape TikTok videos, comments, profiles, hashtags, and more — no login or paid services required.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  }
+}
