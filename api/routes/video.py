@@ -223,3 +223,21 @@ async def batch_video_scrape(request: Request, urls: list[str]):
         return {"success": True, "count": len(results), "data": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/download/tkwm")
+async def get_tkwm_download_link(request: Request, url: str = Query(...)):
+    _ = validate_rapidapi_key(request)
+    proxy_url, proxies = get_random_proxy()  # Rotates proxies
+    try:
+        async with httpx.AsyncClient(proxies=proxies, timeout=30) as client:
+            response = await client.get("https://www.tikwm.com/api/", params={"url": url})
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="TikWM API request failed")
+        result = response.json()
+        if not result.get("data") or not result["data"].get("play"):
+            raise HTTPException(status_code=404, detail="Download link not found")
+        download_url = result["data"]["play"]
+        return {"success": True, "download_url": download_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TikWM download fetch error: {e}")
+
