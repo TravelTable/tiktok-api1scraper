@@ -1,46 +1,29 @@
 from fastapi import APIRouter, Query, HTTPException
-from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.responses import StreamingResponse
 from engine.video import fetch_video_metadata, fetch_video_download_url
-from engine.comments_browser import fetch_comments_headless
 import httpx
+import io
 import random
 from typing import Tuple
 import os
-import json
+import httpx
 from bs4 import BeautifulSoup
+
 import logging
 import traceback
 
-# --- Load Webshare proxies ---
-proxy_file_path = os.path.join(os.path.dirname(__file__), "../../proxies.txt")
-try:
-    with open(proxy_file_path, "r") as f:
-        raw_proxies = [line.strip() for line in f if line.strip()]
-except FileNotFoundError:
-    raw_proxies = []
-    print("Warning: proxies.txt not found. Proxying will fail unless fixed.")
+import re
 
-def get_random_proxy() -> Tuple[str, dict]:
-    proxy_line = random.choice(raw_proxies)
-    ip, port, user, pwd = proxy_line.split(":")
-    proxy_url = f"http://{user}:{pwd}@{ip}:{port}"
-    return proxy_url, {"http://": proxy_url, "https://": proxy_url}
+import traceback  # Make sure this is at the top
 
-# --- TTDownloader video URL fetch with rotating proxies ---
 async def get_ttdownloader_video_url(tiktok_url: str) -> str:
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://ttdownloader.com/"
     }
 
-    # --- ROTATE PROXY for every request ---
-    proxy_line = random.choice(raw_proxies)
-    ip, port, user, pwd = proxy_line.split(":")
-    proxy_url = f"http://{user}:{pwd}@{ip}:{port}"
-    proxies = {"http://": proxy_url, "https://": proxy_url}
-
     try:
-        async with httpx.AsyncClient(headers=headers, proxies=proxies, follow_redirects=True, timeout=30) as client:
+        async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=30) as client:
             r1 = await client.get("https://ttdownloader.com/")
             soup1 = BeautifulSoup(r1.text, "html.parser")
             token_input = soup1.find("input", {"id": "token"})
@@ -79,6 +62,22 @@ async def get_ttdownloader_video_url(tiktok_url: str) -> str:
 
 router = APIRouter()
 
+# --- Load Webshare proxies ---
+proxy_file_path = os.path.join(os.path.dirname(__file__), "../../proxies.txt")
+try:
+    with open(proxy_file_path, "r") as f:
+        raw_proxies = [line.strip() for line in f if line.strip()]
+except FileNotFoundError:
+    raw_proxies = []
+    print("Warning: proxies.txt not found. Proxying will fail unless fixed.")
+
+def get_random_proxy() -> Tuple[str, dict]:
+    proxy_line = random.choice(raw_proxies)
+    ip, port, user, pwd = proxy_line.split(":")
+    proxy_url = f"http://{user}:{pwd}@{ip}:{port}"
+    return proxy_url, {"http://": proxy_url, "https://": proxy_url}
+
+
 @router.get("/video/proxy")
 async def proxy_tiktok_video(url: str):
     headers = {
@@ -108,8 +107,46 @@ async def proxy_tiktok_video(url: str):
         }
     )
 
+
+@router.get("/")
+async def get_video_metadata(url: str = Query(..., description="TikTok video URL")):
+    try:
+        data = await fetch_video_metadata(url)
+        if not data:
+            raise HTTPException(status_code=404, detail="Video not found or invalid")
+        return {"success": True, "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/download")
+async def get_download_link(url: str = Query(..., description="TikTok video URL")):
+    try:
+        download_url = await fetch_video_download_url(url)
+        if not download_url:
+            raise HTTPException(status_code=404, detail="Download link not found")
+        return {"success": True, "url": download_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/batch")
+async def batch_video_scrape(urls: list[str]):
+    try:
+        results = []
+        for url in urls[:20]:  # max 20 videos per request
+            data = await fetch_video_metadata(url)
+            if data:
+                results.append(data)
+        return {"success": True, "count": len(results), "data": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+from fastapi.requests import Request
+from fastapi.responses import HTMLResponse
+
 @router.get("/proxy/view", response_class=HTMLResponse)
-async def proxy_video_view(url: str, request):
+async def proxy_video_view(url: str, request: Request):
     base_url = str(request.base_url).rstrip("/")
     from urllib.parse import quote
     proxy_endpoint = f"{base_url}/video/proxy?url={quote(url)}"
@@ -143,47 +180,42 @@ async def proxy_video_view(url: str, request):
     </html>
     """
 
-@router.get("/")
-async def get_video_metadata(url: str = Query(..., description="TikTok video URL")):
-    try:
-        data = await fetch_video_metadata(url)
-        if not data:
-            raise HTTPException(status_code=404, detail="Video not found or invalid")
-        return {"success": True, "data": data}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/download")
-async def get_download_link(url: str = Query(..., description="TikTok video URL")):
-    try:
-        download_url = await fetch_video_download_url(url)
-        if not download_url:
-            raise HTTPException(status_code=404, detail="Download link not found")
-        return {"success": True, "url": download_url}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 @router.get("/download/ttdownloader")
-async def get_download_link_ttdownloader(url: str = Query(..., description="TikTok video URL")):
+async def get_download_link_tiktok(url: str = Query(..., description="TikTok video URL")):
     try:
-        download_url = await get_ttdownloader_video_url(url)
-        if not download_url:
-            raise HTTPException(status_code=404, detail="Download link not found")
-        return {"success": True, "url": download_url}
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://www.tikwm.com/api/", params={"url": url})
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail="TikWM API request failed")
+
+        result = response.json()
+        if not result.get("data") or not result["data"].get("play"):
+            raise HTTPException(status_code=404, detail="No downloadable video found")
+
+        return {
+            "success": True,
+            "url": result["data"]["play"]  # Only return no-watermark video link
+        }
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"TTDownloader error: {e}")
+        raise HTTPException(status_code=500, detail=f"TikWM error: {str(e)}")
 
 @router.get("/interactions")
 async def get_video_interactions(url: str = Query(..., description="Full TikTok video URL")):
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get("https://www.tikwm.com/api/", params={"url": url})
+        
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail="TikWM video API request failed")
+
         result = response.json()
         if not result.get("data"):
             raise HTTPException(status_code=404, detail="Video data not found")
+
         data = result["data"]
+
         return {
             "success": True,
             "video_url": url,
@@ -207,29 +239,40 @@ async def get_video_comments(url: str = Query(..., description="TikTok video URL
                 "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
             )
         }
+
         async with httpx.AsyncClient(headers=headers) as client:
             response = await client.get(url)
+
         if response.status_code != 200:
             raise HTTPException(status_code=500, detail="Failed to fetch TikTok video page")
+
         text = response.text
         start_marker = '<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">'
         end_marker = "</script>"
+
         start = text.find(start_marker)
         end = text.find(end_marker, start)
+
         if start == -1 or end == -1:
             raise HTTPException(status_code=500, detail="Failed to find comment JSON block")
+
         json_text = text[start + len(start_marker):end]
         data = json.loads(json_text)
+
         comments = data.get("__DEFAULT_SCOPE__", {}).get("webapp.video-detail", {}).get("commentList", [])
         if not comments:
             raise HTTPException(status_code=404, detail="No comments found")
+
         return {
             "success": True,
             "comment_count": len(comments),
             "comments": [c.get("comment", {}).get("text", "") for c in comments]
         }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Comment extraction failed: {str(e)}")
+
+from engine.comments_browser import fetch_comments_headless
 
 @router.get("/comments/live")
 async def get_live_comments(url: str = Query(..., description="TikTok video URL")):
@@ -238,15 +281,3 @@ async def get_live_comments(url: str = Query(..., description="TikTok video URL"
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Headless comment scrape failed: {e}")
-
-@router.post("/batch")
-async def batch_video_scrape(urls: list[str]):
-    try:
-        results = []
-        for url in urls[:20]:  # max 20 videos per request
-            data = await fetch_video_metadata(url)
-            if data:
-                results.append(data)
-        return {"success": True, "count": len(results), "data": results}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
