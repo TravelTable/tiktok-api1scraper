@@ -180,26 +180,55 @@ async def proxy_video_view(url: str, request: Request):
     </html>
     """
 
-@router.get("/download/ttdownloader")
-async def get_download_link_tiktok(url: str = Query(..., description="TikTok video URL")):
+async def get_ttdownloader_video_url(tiktok_url: str) -> str:
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://ttdownloader.com/"
+    }
+
+    # --- ROTATE PROXY for every request ---
+    proxy_line = random.choice(raw_proxies)
+    ip, port, user, pwd = proxy_line.split(":")
+    proxy_url = f"http://{user}:{pwd}@{ip}:{port}"
+    proxies = {"http://": proxy_url, "https://": proxy_url}
+
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get("https://www.tikwm.com/api/", params={"url": url})
+        async with httpx.AsyncClient(headers=headers, proxies=proxies, follow_redirects=True, timeout=30) as client:
+            r1 = await client.get("https://ttdownloader.com/")
+            soup1 = BeautifulSoup(r1.text, "html.parser")
+            token_input = soup1.find("input", {"id": "token"})
+            if not token_input or not token_input.get("value"):
+                raise ValueError("Token not found")
 
-        if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="TikWM API request failed")
+            token = token_input["value"]
+            payload = {
+                "url": tiktok_url,
+                "format": "",
+                "token": token
+            }
 
-        result = response.json()
-        if not result.get("data") or not result["data"].get("play"):
-            raise HTTPException(status_code=404, detail="No downloadable video found")
+            r2 = await client.post("https://ttdownloader.com/req/", data=payload)
+            soup2 = BeautifulSoup(r2.text, "html.parser")
 
-        return {
-            "success": True,
-            "url": result["data"]["play"]  # Only return no-watermark video link
-        }
+            # Save debug HTML
+            with open("ttdebug.html", "w", encoding="utf-8") as f:
+                f.write(soup2.prettify())
+
+            candidates = soup2.find_all("a", href=True, class_="download-link")
+            for a in candidates:
+                if "Without watermark" in a.text or "No watermark" in a.text:
+                    return a["href"]
+
+            for a in candidates:
+                if a["href"].startswith("http"):
+                    return a["href"]
+
+            raise ValueError("No valid TikTok download link found in TTDownloader response.")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"TikWM error: {str(e)}")
+        print("----- ERROR in TTDownloader -----")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"TTDownloader error: {e}")
 
 @router.get("/interactions")
 async def get_video_interactions(url: str = Query(..., description="Full TikTok video URL")):
