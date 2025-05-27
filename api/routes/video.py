@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Query, HTTPException, Request
 from fastapi.responses import StreamingResponse, HTMLResponse
 from engine.video import fetch_video_metadata, fetch_video_download_url
-from engine.comments_browser import fetch_comments_headless
 import httpx
 import random
 from typing import Tuple
