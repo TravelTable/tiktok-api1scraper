@@ -27,12 +27,6 @@ def get_random_proxy() -> Tuple[str, dict]:
     proxy_url = f"http://{user}:{pwd}@{ip}:{port}"
     return proxy_url, {"http://": proxy_url, "https://": proxy_url}
 
-def validate_rapidapi_key(request: Request) -> str:
-    key = request.headers.get("x-rapidapi-key")
-    if not key:
-        raise HTTPException(status_code=401, detail="Missing x-rapidapi-key header")
-    return key
-
 async def get_ttdownloader_video_url(tiktok_url: str) -> str:
     headers = {
         "User-Agent": "Mozilla/5.0",
@@ -79,7 +73,6 @@ router = APIRouter()
 
 @router.get("/video/proxy")
 async def proxy_tiktok_video(url: str, request: Request):
-    _ = validate_rapidapi_key(request)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0.0.0 Safari/537.36",
         "Referer": "https://www.tiktok.com/"
@@ -104,7 +97,6 @@ async def proxy_tiktok_video(url: str, request: Request):
 
 @router.get("/proxy/view", response_class=HTMLResponse)
 async def proxy_video_view(url: str, request: Request):
-    _ = validate_rapidapi_key(request)
     base_url = str(request.base_url).rstrip("/")
     proxy_endpoint = f"{base_url}/video/proxy?url={quote(url)}"
     return f"""
@@ -120,7 +112,6 @@ async def proxy_video_view(url: str, request: Request):
 
 @router.get("/")
 async def get_video_metadata(request: Request, url: str = Query(...)):
-    _ = validate_rapidapi_key(request)
     try:
         data = await fetch_video_metadata(url)
         if not data:
@@ -131,7 +122,6 @@ async def get_video_metadata(request: Request, url: str = Query(...)):
 
 @router.get("/download")
 async def get_download_link(request: Request, url: str = Query(...)):
-    _ = validate_rapidapi_key(request)
     try:
         download_url = await fetch_video_download_url(url)
         if not download_url:
@@ -142,7 +132,6 @@ async def get_download_link(request: Request, url: str = Query(...)):
 
 @router.get("/download/ttdownloader")
 async def get_download_link_ttdownloader(request: Request, url: str = Query(...)):
-    _ = validate_rapidapi_key(request)
     try:
         download_url = await get_ttdownloader_video_url(url)
         return {"success": True, "url": download_url}
@@ -151,7 +140,6 @@ async def get_download_link_ttdownloader(request: Request, url: str = Query(...)
 
 @router.get("/interactions")
 async def get_video_interactions(request: Request, url: str = Query(...)):
-    _ = validate_rapidapi_key(request)
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get("https://www.tikwm.com/api/", params={"url": url})
@@ -177,7 +165,6 @@ async def get_video_interactions(request: Request, url: str = Query(...)):
 
 @router.get("/comments")
 async def get_video_comments(request: Request, url: str = Query(...)):
-    _ = validate_rapidapi_key(request)
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/123.0.0.0 Safari/537.36"
@@ -206,7 +193,6 @@ async def get_video_comments(request: Request, url: str = Query(...)):
 
 @router.get("/comments/live")
 async def get_live_comments(request: Request, url: str = Query(...)):
-    _ = validate_rapidapi_key(request)
     try:
         return fetch_comments_headless(url)
     except Exception as e:
@@ -214,7 +200,6 @@ async def get_live_comments(request: Request, url: str = Query(...)):
 
 @router.post("/batch")
 async def batch_video_scrape(request: Request, urls: list[str]):
-    _ = validate_rapidapi_key(request)
     try:
         results = []
         for url in urls[:20]:
@@ -227,9 +212,6 @@ async def batch_video_scrape(request: Request, urls: list[str]):
 
 @router.get("/download/tkwm")
 async def get_tkwm_download_link(request: Request, url: str = Query(...)):
-    import aiohttp
-
-    _ = validate_rapidapi_key(request)
     proxy = "http://proxy-rotator-hrst.onrender.com:10000"  # Use your Render proxy rotator
 
     # Try with proxy first
@@ -254,7 +236,6 @@ async def get_tkwm_download_link(request: Request, url: str = Query(...)):
                     "proxy_used": True
                 }
     except Exception as proxy_error:
-        # Log the proxy error for debugging
         print(f"Proxy mode failed: {proxy_error}")
 
         # Fallback to direct request (no proxy)
