@@ -228,8 +228,8 @@ async def batch_video_scrape(request: Request, urls: list[str]):
 async def get_tkwm_download_link(request: Request, url: str = Query(...)):
     _ = validate_rapidapi_key(request)
     proxies = {
-        "http://": "http://proxy-rotator-xxxxxx.onrender.com:10000",
-        "https://": "http://proxy-rotator-xxxxxx.onrender.com:10000"
+        "http://": "http://proxy-rotator-hrst.onrender.com:10000",   # <-- YOUR Render subdomain here
+        "https://": "http://proxy-rotator-hrst.onrender.com:10000"
     }
     try:
         async with httpx.AsyncClient(proxies=proxies, timeout=30) as client:
@@ -243,4 +243,3 @@ async def get_tkwm_download_link(request: Request, url: str = Query(...)):
         return {"success": True, "download_url": download_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TikWM download fetch error: {e}")
-
