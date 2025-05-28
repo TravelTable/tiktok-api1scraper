@@ -226,7 +226,7 @@ async def batch_video_scrape(request: Request, urls: list[str]):
 
 import aiohttp
 
-@router.get("/download/tkwm")
+@router.get("/video/download/tkwm")
 async def get_tkwm_download_link(request: Request, url: str = Query(...)):
     _ = validate_rapidapi_key(request)
     proxy = "http://proxy-rotator-hrst.onrender.com:10000"  # Use your Render proxy rotator
