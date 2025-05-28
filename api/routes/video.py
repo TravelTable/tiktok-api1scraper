@@ -227,11 +227,8 @@ async def batch_video_scrape(request: Request, urls: list[str]):
 
 @router.get("/download/tkwm")
 async def get_tkwm_download_link(request: Request, url: str = Query(...)):
-    """
-    Fetches the TikTok download link from TikWM using a proxy rotator server.
-    """
-    validate_rapidapi_key(request)
-    proxy = "http://proxy-rotator-hrst.onrender.com:10000"  # <-- your proxy rotator service
+    _ = validate_rapidapi_key(request)
+    proxy = "http://proxy-rotator-hrst.onrender.com:10000"  # Use your Render proxy rotator
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -243,11 +240,20 @@ async def get_tkwm_download_link(request: Request, url: str = Query(...)):
                 headers={"User-Agent": "Mozilla/5.0"}
             ) as response:
                 if response.status != 200:
-                    raise HTTPException(status_code=500, detail="TikWM API request failed")
-                result = await response.json()
+                    raise HTTPException(status_code=500, detail=f"TikWM API request failed: HTTP {response.status}")
+                try:
+                    result = await response.json()
+                except Exception as json_err:
+                    text = await response.text()
+                    raise HTTPException(status_code=500, detail=f"TikWM API returned non-JSON: {text[:300]}")
+
                 if not result.get("data") or not result["data"].get("play"):
-                    raise HTTPException(status_code=404, detail="Download link not found")
+                    raise HTTPException(status_code=404, detail=f"Download link not found. Response: {result}")
                 download_url = result["data"]["play"]
                 return {"success": True, "download_url": download_url}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"TikWM download fetch error: {e}")
+        import traceback
+        tb = traceback.format_exc()
+        print("==== TikWM Proxy Debug ====")
+        print(tb)
+        raise HTTPException(status_code=500, detail=f"TikWM download fetch error: {repr(e)}")
