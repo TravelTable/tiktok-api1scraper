@@ -28,15 +28,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global RapidAPI Key Authentication
-@app.middleware("http")
-async def enforce_rapidapi_key(request: Request, call_next):
-    if request.url.path.startswith("/docs") or request.url.path.startswith("/openapi.json"):
-        return await call_next(request)
-    if not request.headers.get("x-rapidapi-key"):
-        raise HTTPException(status_code=401, detail="Missing x-rapidapi-key header")
-    return await call_next(request)
-
 # Register all API route modules
 app.include_router(video.router, prefix="/video", tags=["Video"])
 app.include_router(comments.router, prefix="/comments", tags=["Comments"])
