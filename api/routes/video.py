@@ -224,22 +224,29 @@ async def batch_video_scrape(request: Request, urls: list[str]):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/download/tkwm")
+import aiohttp
+
+@router.get("/video/download/tkwm")
 async def get_tkwm_download_link(request: Request, url: str = Query(...)):
     _ = validate_rapidapi_key(request)
-    proxies = {
-        "http://": "http://proxy-rotator-hrst.onrender.com:10000",   # <-- YOUR Render subdomain here
-        "https://": "http://proxy-rotator-hrst.onrender.com:10000"
-    }
+    proxy = "http://proxy-rotator-hrst.onrender.com:10000"  # Use your Render proxy rotator
+
     try:
-        async with httpx.AsyncClient(proxies=proxies, timeout=30) as client:
-            response = await client.get("https://www.tikwm.com/api/", params={"url": url})
-        if response.status_code != 200:
-            raise HTTPException(status_code=500, detail="TikWM API request failed")
-        result = response.json()
-        if not result.get("data") or not result["data"].get("play"):
-            raise HTTPException(status_code=404, detail="Download link not found")
-        download_url = result["data"]["play"]
-        return {"success": True, "download_url": download_url}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://www.tikwm.com/api/",
+                params={"url": url},
+                proxy=proxy,
+                timeout=aiohttp.ClientTimeout(total=30),
+                headers={"User-Agent": "Mozilla/5.0"}
+            ) as response:
+                if response.status != 200:
+                    raise HTTPException(status_code=500, detail="TikWM API request failed")
+                result = await response.json()
+                if not result.get("data") or not result["data"].get("play"):
+                    raise HTTPException(status_code=404, detail="Download link not found")
+                download_url = result["data"]["play"]
+                return {"success": True, "download_url": download_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TikWM download fetch error: {e}")
+
