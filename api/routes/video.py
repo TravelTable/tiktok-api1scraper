@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 import logging
 import traceback
 from urllib.parse import quote
+import aiohttp
 
 # --- Load Webshare proxies ---
 proxy_file_path = os.path.join(os.path.dirname(__file__), "../../proxies.txt")
@@ -224,12 +225,13 @@ async def batch_video_scrape(request: Request, urls: list[str]):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-import aiohttp
-
 @router.get("/download/tkwm")
 async def get_tkwm_download_link(request: Request, url: str = Query(...)):
-    _ = validate_rapidapi_key(request)
-    proxy = "http://proxy-rotator-hrst.onrender.com:10000"  # Use your Render proxy rotator
+    """
+    Fetches the TikTok download link from TikWM using a proxy rotator server.
+    """
+    validate_rapidapi_key(request)
+    proxy = "http://proxy-rotator-hrst.onrender.com:10000"  # <-- your proxy rotator service
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -249,4 +251,3 @@ async def get_tkwm_download_link(request: Request, url: str = Query(...)):
                 return {"success": True, "download_url": download_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"TikWM download fetch error: {e}")
-
