@@ -8,3 +8,5 @@ loguru
 undetected-chromedriver
 selenium
 jmespath==1.0.1
+aiohttp
+
