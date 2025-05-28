@@ -109,7 +109,8 @@ async def proxy_video_view(url: str, request: Request):
     <video controls autoplay width="320" height="540">
         <source src="{proxy_endpoint}" type="video/mp4">Your browser does not support the video tag.
     </video></body></html>"""
-
+    
+@router.get("")
 @router.get("/")
 async def get_video_metadata(request: Request, url: str = Query(...)):
     try:
