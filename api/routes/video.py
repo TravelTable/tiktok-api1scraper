@@ -227,9 +227,12 @@ async def batch_video_scrape(request: Request, urls: list[str]):
 
 @router.get("/download/tkwm")
 async def get_tkwm_download_link(request: Request, url: str = Query(...)):
+    import aiohttp
+
     _ = validate_rapidapi_key(request)
     proxy = "http://proxy-rotator-hrst.onrender.com:10000"  # Use your Render proxy rotator
 
+    # Try with proxy first
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
@@ -240,20 +243,39 @@ async def get_tkwm_download_link(request: Request, url: str = Query(...)):
                 headers={"User-Agent": "Mozilla/5.0"}
             ) as response:
                 if response.status != 200:
-                    raise HTTPException(status_code=500, detail=f"TikWM API request failed: HTTP {response.status}")
-                try:
-                    result = await response.json()
-                except Exception as json_err:
-                    text = await response.text()
-                    raise HTTPException(status_code=500, detail=f"TikWM API returned non-JSON: {text[:300]}")
-
+                    raise Exception(f"Proxy request failed with status {response.status}")
+                result = await response.json()
                 if not result.get("data") or not result["data"].get("play"):
-                    raise HTTPException(status_code=404, detail=f"Download link not found. Response: {result}")
+                    raise Exception("Download link not found in proxy mode")
                 download_url = result["data"]["play"]
-                return {"success": True, "download_url": download_url}
-    except Exception as e:
-        import traceback
-        tb = traceback.format_exc()
-        print("==== TikWM Proxy Debug ====")
-        print(tb)
-        raise HTTPException(status_code=500, detail=f"TikWM download fetch error: {repr(e)}")
+                return {
+                    "success": True,
+                    "download_url": download_url,
+                    "proxy_used": True
+                }
+    except Exception as proxy_error:
+        # Log the proxy error for debugging
+        print(f"Proxy mode failed: {proxy_error}")
+
+        # Fallback to direct request (no proxy)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://www.tikwm.com/api/",
+                    params={"url": url},
+                    timeout=aiohttp.ClientTimeout(total=30),
+                    headers={"User-Agent": "Mozilla/5.0"}
+                ) as response:
+                    if response.status != 200:
+                        raise Exception(f"Direct request failed with status {response.status}")
+                    result = await response.json()
+                    if not result.get("data") or not result["data"].get("play"):
+                        raise Exception("Download link not found in direct mode")
+                    download_url = result["data"]["play"]
+                    return {
+                        "success": True,
+                        "download_url": download_url,
+                        "proxy_used": False
+                    }
+        except Exception as direct_error:
+            raise HTTPException(status_code=500, detail=f"TikWM fetch error: Proxy error: {proxy_error} | Direct error: {direct_error}")
